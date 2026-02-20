@@ -97,7 +97,7 @@ Packets arrive as `[0x55][0x10][len16][payload]` frames.  The driver decodes the
 reconstructs the BLE LL PDU, appends a BLE CRC-24, and writes a
 `LINKTYPE_BLUETOOTH_LE_LL_WITH_PHDR` pcap record.  Wireshark takes it from there.
 
-Full reverse engineering notes: [`CLAUDE.md`](CLAUDE.md) and [`RE_PROCESS.md`](RE_PROCESS.md).
+Full reverse engineering notes: [`RE_PROCESS.md`](RE_PROCESS.md).
 
 ---
 
