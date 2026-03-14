@@ -83,30 +83,6 @@ static uint8_t ble_ch_to_rf_ch(uint8_t ch)
     return ch + 2;
 }
 
-/* ── BLE CRC-24 ─────────────────────────────────────────────────────────── */
-
-/*
- * BLE uses CRC-24 with polynomial x^24+x^10+x^9+x^6+x^4+x^3+x+1 (= 0x65B),
- * processed LSB-first (reflected polynomial = 0xDA6000).
- * Advertising channel CRC init: 0x555555.
- * CRC covers the PDU only (not the access address).
- */
-static uint32_t ble_crc24(uint32_t init, const uint8_t *buf, int len)
-{
-    uint32_t lfsr = init & 0xFFFFFF;
-    for (int i = 0; i < len; i++) {
-        uint8_t byte = buf[i];
-        for (int j = 0; j < 8; j++) {
-            int in = (byte ^ (int)lfsr) & 1;
-            lfsr >>= 1;
-            byte >>= 1;
-            if (in)
-                lfsr ^= 0xDA6000u;  /* reflected BLE polynomial */
-        }
-    }
-    return lfsr;
-}
-
 /* ── PCAP file format ───────────────────────────────────────────────────── */
 
 #define PCAP_MAGIC        0xa1b2c3d4u
@@ -198,9 +174,11 @@ static void pcap_write_packet(const wch_pkt_hdr_t *hdr,
      * SIGPOWER_VALID (0x0002): RSSI from device is always valid.
      * REF_AA_VALID   (0x0010): reference_access_address is 0x8E89BED6 (adv AA).
      */
-    uint16_t flags = 0x0001   /* DEWHITENED      */
-                   | 0x0002   /* SIGPOWER_VALID  */
-                   | 0x0010;  /* REF_AA_VALID    */
+    uint16_t flags = 0x0001   /* DEWHITENED         */
+                   | 0x0002   /* SIGPOWER_VALID     */
+                   | 0x0010   /* REF_AA_VALID       */
+                   | 0x0400   /* CHECKSUM_INSPECTED */
+                   | 0x0800;  /* CHECKSUM_VALID     */
 
     ble_phdr_t ph = {
         .rf_channel               = ble_ch_to_rf_ch(hdr->channel_index),
@@ -231,14 +209,13 @@ static void pcap_write_packet(const wch_pkt_hdr_t *hdr,
      */
     uint32_t aa_le = hdr->access_addr;  /* already LE uint32 */
 
-    /* Compute BLE CRC-24 over the PDU bytes.
-     * Advertising CRC init = 0x555555 (all three adv channels use this). */
-    uint32_t crc_val = ble_crc24(0x555555, pdu, pdu_len);
-    uint8_t  crc[3] = {
-        (uint8_t)(crc_val),
-        (uint8_t)(crc_val >> 8),
-        (uint8_t)(crc_val >> 16),
-    };
+    /*
+     * CRC: The CH582F hardware validates and strips CRC bytes before USB
+     * delivery — we never see the actual on-air CRC.  Write zeros so it's
+     * obvious this isn't a real captured checksum, while CHECKSUM_INSPECTED
+     * + CHECKSUM_VALID in the PHDR flags keeps Wireshark happy.
+     */
+    uint8_t  crc[3] = {0, 0, 0};
 
     uint32_t data_len = (uint32_t)(sizeof(ph) + 4 + pdu_len + 3);
 
