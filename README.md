@@ -94,8 +94,14 @@ Device → 55 10 ...          BLE packets, forever
 ```
 
 Packets arrive as `[0x55][0x10][len16][payload]` frames.  The driver decodes them,
-reconstructs the BLE LL PDU, appends a BLE CRC-24, and writes a
-`LINKTYPE_BLUETOOTH_LE_LL_WITH_PHDR` pcap record.  Wireshark takes it from there.
+reconstructs the BLE LL PDU, and writes a `LINKTYPE_BLUETOOTH_LE_LL_WITH_PHDR` pcap
+record.  Wireshark takes it from there.
+
+**CRC note:** The CH582F hardware validates and strips CRC bytes before USB delivery —
+the actual on-air CRC is never available to the host.  Rather than faking a computed
+CRC-24 that could be mistaken for a real capture, we write `00 00 00` and set the
+`CHECKSUM_INSPECTED | CHECKSUM_VALID` PHDR flags so Wireshark still decodes everything
+correctly.
 
 Full reverse engineering notes: [`RE_PROCESS.md`](RE_PROCESS.md).
 
